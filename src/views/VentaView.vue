@@ -2,30 +2,22 @@
   <div class="venta-card">
     <h2>Generar Venta</h2>
     <form @submit.prevent="generateFactura">
-      <input
-        type="text"
-        v-model="clienteInput"
-        @input="searchClientes"
-        placeholder="Buscar cliente"
-        required
-      />
-      <div v-if="clientes.length">
-        <ul class="clientes-list">
-          <li v-for="cliente in clientes" :key="cliente.id" @click="selectCliente(cliente)">
-            {{ cliente.nombres }} {{ cliente.apellidos }}
-          </li>
-        </ul>
+      <div class="cliente-input">
+        <input
+          type="text"
+          v-model="clienteInput"
+          @input="buscarCliente"
+          placeholder="Ingrese el nombre del cliente"
+          required
+        />
       </div>
       
-      <div v-if="!clientes.length && clienteInput" class="nuevo-cliente">
-        <p>No se encontró el cliente. ¿Desea crear uno nuevo?</p>
-        <button type="button" @click="addNewCliente">Crear Cliente</button>
-      </div>
-      
-      <div v-for="(producto, index) in productos" :key="index">
+      <div v-for="(producto, index) in productos" :key="index" class="producto-item">
         <select v-model="producto.id" required>
           <option value="">Seleccione un producto</option>
-          <!-- Aquí puedes cargar los productos disponibles -->
+          <option v-for="prod in todosLosProductos" :key="prod.idProducto" :value="prod.idProducto">
+            {{ prod.nombre }}
+          </option>
         </select>
         <input type="number" v-model="producto.cantidad" placeholder="Cantidad" required min="1" />
       </div>
@@ -39,61 +31,59 @@
 </template>
 
 <script>
-import clienteService from '@/services/clienteService';
+import productoService from '@/services/productService'; // Asegúrate de tener este servicio
+import personaService from '@/services/personaService'; // Asegúrate de tener este servicio
 
 export default {
   data() {
     return {
-      clienteInput: '',
-      selectedCliente: null,
-      clientes: [], // Almacena clientes encontrados
-      productos: [{ id: '', cantidad: 1 }], // Almacena productos seleccionados
+      clienteInput: '', // Input del cliente
+      productos: [{ id: '', cantidad: 1 }],
+      todosLosProductos: [], // Aquí almacenaremos todos los productos
+      clientes: [], // Aquí almacenaremos los clientes encontrados
     };
   },
   methods: {
-    async searchClientes() {
-      if (this.clienteInput.length > 2) { // Realiza la búsqueda si hay más de 2 caracteres
-        try {
-          const response = await clienteService.fetchClientes(this.clienteInput);
-          this.clientes = response.data; // Asigna los clientes encontrados
-        } catch (error) {
-          console.error("Error buscando clientes:", error);
-        }
-      } else {
-        this.clientes = []; // Limpiar la lista si hay menos de 3 caracteres
-      }
-    },
-    selectCliente(cliente) {
-      this.selectedCliente = cliente.id; // Establece el cliente seleccionado
-      this.clienteInput = `${cliente.nombres} ${cliente.apellidos}`; // Muestra el nombre del cliente
-      this.clientes = []; // Limpiar la lista de clientes
-    },
-    async addNewCliente() {
-      const newCliente = {
-        nombres: this.clienteInput, // Puedes agregar más campos según tu modelo
-      };
-
-      try {
-        const response = await clienteService.addCliente(newCliente);
-        this.selectedCliente = response.data.id; // Asigna el ID del nuevo cliente
-        alert('Cliente creado con éxito!');
-        this.clientes = []; // Limpiar la lista de clientes
-        this.clienteInput = ''; // Limpiar el campo de entrada
-      } catch (error) {
-        console.error("Error creando cliente:", error);
-      }
-    },
     addProducto() {
       this.productos.push({ id: '', cantidad: 1 });
     },
+    async buscarCliente() {
+      try {
+        if (this.clienteInput.length >= 3) { // Solo buscar si hay al menos 3 caracteres
+          const response = await personaService.fetchClientes(this.clienteInput);
+          this.clientes = response.data; // Actualiza la lista de clientes encontrados
+        } else {
+          this.clientes = []; // Reinicia la lista si el texto es corto
+        }
+      } catch (error) {
+        console.error('Error al buscar clientes:', error);
+      }
+    },
     async generateFactura() {
+      let cliente;
+      const encontrado = this.clientes.find(c => 
+        `${c.nombres} ${c.apellidos}`.toLowerCase() === this.clienteInput.toLowerCase()
+      );
+
+      if (encontrado) {
+        cliente = encontrado.documento; // Si se encontró, utiliza su documento
+      } else {
+        // Si no se encontró, crea un nuevo cliente
+        const nuevoCliente = {
+          nombres: this.clienteInput.split(' ')[0], // Asumiendo el primer nombre
+          apellidos: this.clienteInput.split(' ').slice(1).join(' '), // El resto como apellidos
+          // Agrega otros campos que sean necesarios
+        };
+        const response = await personaService.addPersona(nuevoCliente);
+        cliente = response.data.documento; // Obtén el documento del nuevo cliente
+      }
+
       const factura = {
-        cliente: this.selectedCliente || { nombres: this.clienteInput }, // Usar el nuevo cliente si no hay uno seleccionado
+        cliente: cliente,
         fecha: new Date(),
         detalles: this.productos.map(p => ({
           idProducto: p.id,
           cantidad: p.cantidad,
-          // Agrega otros campos necesarios, como el IVA
         })),
       };
 
@@ -104,6 +94,17 @@ export default {
         console.error('Error generando la factura:', error);
       }
     },
+    async fetchProductos() {
+      try {
+        const response = await productoService.fetchProductos();
+        this.todosLosProductos = response.data;
+      } catch (error) {
+        console.error('Error al obtener productos:', error);
+      }
+    }
+  },
+  created() {
+    this.fetchProductos(); // Llama a este método para llenar la lista de productos
   },
 };
 </script>
@@ -118,43 +119,28 @@ export default {
   margin: 20px auto;
 }
 
+h2 {
+  text-align: center;
+  color: #333;
+}
+
 input, select {
-  width: 95%;
+  width: 100%;
   padding: 10px;
   margin: 10px 0;
   border: 1px solid #ccc;
   border-radius: 5px;
+  font-size: 16px;
 }
 
-.clientes-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #ccc;
-  background: white;
-  position: absolute;
-  z-index: 1000;
-}
-
-.clientes-list li {
-  padding: 10px;
-  cursor: pointer;
-}
-
-.clientes-list li:hover {
-  background-color: #f0f0f0;
-}
-
-.nuevo-cliente {
-  margin-top: 10px;
+.producto-item {
+  margin-bottom: 15px; /* Espacio entre los productos */
 }
 
 .button-container {
   display: flex;
   justify-content: space-between;
-  margin-top: 10px; /* Espacio entre los botones y el formulario */
+  margin-top: 15px; /* Espacio entre los botones y el formulario */
 }
 
 .button {
@@ -165,12 +151,12 @@ input, select {
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.3s;
-  flex: 1;
-  margin-right: 10px; 
+  flex: 1; /* Asegura que los botones ocupen el mismo espacio */
+  margin-right: 10px; /* Espacio entre los botones */
 }
 
 .button:last-child {
-  margin-right: 0; 
+  margin-right: 0; /* Elimina el margen derecho del último botón */
 }
 
 .button:hover {
