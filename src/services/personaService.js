@@ -7,5 +7,6 @@ class PersonaService {
     return await axios.post(API_URL, persona);
   }
 }
-
 export default new PersonaService();
+
+
