@@ -2,10 +2,25 @@
   <div class="venta-card">
     <h2>Generar Venta</h2>
     <form @submit.prevent="generateFactura">
-      <select v-model="selectedCliente" required>
-        <option value="">Seleccione un cliente</option>
-        <!-- Aquí puedes cargar los clientes disponibles -->
-      </select>
+      <input
+        type="text"
+        v-model="clienteInput"
+        @input="searchClientes"
+        placeholder="Buscar cliente"
+        required
+      />
+      <div v-if="clientes.length">
+        <ul class="clientes-list">
+          <li v-for="cliente in clientes" :key="cliente.id" @click="selectCliente(cliente)">
+            {{ cliente.nombres }} {{ cliente.apellidos }}
+          </li>
+        </ul>
+      </div>
+      
+      <div v-if="!clientes.length && clienteInput" class="nuevo-cliente">
+        <p>No se encontró el cliente. ¿Desea crear uno nuevo?</p>
+        <button type="button" @click="addNewCliente">Crear Cliente</button>
+      </div>
       
       <div v-for="(producto, index) in productos" :key="index">
         <select v-model="producto.id" required>
@@ -24,20 +39,56 @@
 </template>
 
 <script>
+import clienteService from '@/services/clienteService';
+
 export default {
   data() {
     return {
-      selectedCliente: '',
+      clienteInput: '',
+      selectedCliente: null,
+      clientes: [], // Almacena clientes encontrados
       productos: [{ id: '', cantidad: 1 }], // Almacena productos seleccionados
     };
   },
   methods: {
+    async searchClientes() {
+      if (this.clienteInput.length > 2) { // Realiza la búsqueda si hay más de 2 caracteres
+        try {
+          const response = await clienteService.fetchClientes(this.clienteInput);
+          this.clientes = response.data; // Asigna los clientes encontrados
+        } catch (error) {
+          console.error("Error buscando clientes:", error);
+        }
+      } else {
+        this.clientes = []; // Limpiar la lista si hay menos de 3 caracteres
+      }
+    },
+    selectCliente(cliente) {
+      this.selectedCliente = cliente.id; // Establece el cliente seleccionado
+      this.clienteInput = `${cliente.nombres} ${cliente.apellidos}`; // Muestra el nombre del cliente
+      this.clientes = []; // Limpiar la lista de clientes
+    },
+    async addNewCliente() {
+      const newCliente = {
+        nombres: this.clienteInput, // Puedes agregar más campos según tu modelo
+      };
+
+      try {
+        const response = await clienteService.addCliente(newCliente);
+        this.selectedCliente = response.data.id; // Asigna el ID del nuevo cliente
+        alert('Cliente creado con éxito!');
+        this.clientes = []; // Limpiar la lista de clientes
+        this.clienteInput = ''; // Limpiar el campo de entrada
+      } catch (error) {
+        console.error("Error creando cliente:", error);
+      }
+    },
     addProducto() {
       this.productos.push({ id: '', cantidad: 1 });
     },
     async generateFactura() {
       const factura = {
-        cliente: this.selectedCliente,
+        cliente: this.selectedCliente || { nombres: this.clienteInput }, // Usar el nuevo cliente si no hay uno seleccionado
         fecha: new Date(),
         detalles: this.productos.map(p => ({
           idProducto: p.id,
@@ -47,7 +98,6 @@ export default {
       };
 
       try {
-        // Aquí llamas a tu servicio para guardar la factura
         await this.$http.post('/api/facturas', factura);
         alert('Factura generada con éxito!');
       } catch (error) {
@@ -76,6 +126,31 @@ input, select {
   border-radius: 5px;
 }
 
+.clientes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  background: white;
+  position: absolute;
+  z-index: 1000;
+}
+
+.clientes-list li {
+  padding: 10px;
+  cursor: pointer;
+}
+
+.clientes-list li:hover {
+  background-color: #f0f0f0;
+}
+
+.nuevo-cliente {
+  margin-top: 10px;
+}
+
 .button-container {
   display: flex;
   justify-content: space-between;
@@ -90,12 +165,12 @@ input, select {
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.3s;
-  flex: 1; /* Asegura que los botones ocupen el mismo espacio */
-  margin-right: 10px; /* Espacio entre los botones */
+  flex: 1;
+  margin-right: 10px; 
 }
 
 .button:last-child {
-  margin-right: 0; /* Elimina el margen derecho del último botón */
+  margin-right: 0; 
 }
 
 .button:hover {
